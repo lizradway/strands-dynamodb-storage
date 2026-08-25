@@ -1,7 +1,7 @@
 {
   "name": "strands-dynamodb-storage",
   "version": "0.1.1",
-  "description": "Amazon DynamoDB storage backend for the Strands Agents SDK \u2014 one Storage implementation for Session Manager, Memory Manager, and any subsystem, with optional S3 offload for large values and an optional native vector-search hook.",
+  "description": "Amazon DynamoDB storage backend for the Strands Agents SDK — one Storage implementation for Session Manager, Memory Manager, and any subsystem, with optional S3 offload for large values and an optional native vector-search hook.",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -59,7 +59,7 @@
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/lib-dynamodb": "^3.1103.0",
     "@aws-sdk/util-dynamodb": "^3.996.7",
-    "@strands-agents/sdk": ">=1.10.0"
+    "@strands-agents/sdk": ">=1.14.0"
   },
   "peerDependenciesMeta": {
     "@aws-sdk/client-s3": {
@@ -73,7 +73,7 @@
     "@aws-sdk/lib-dynamodb": "^3.1104.0",
     "@aws-sdk/util-dynamodb": "^3.996.7",
     "@eslint/js": "^9.0.0",
-    "@strands-agents/sdk": "^1.10.0",
+    "@strands-agents/sdk": "^1.14.0",
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",

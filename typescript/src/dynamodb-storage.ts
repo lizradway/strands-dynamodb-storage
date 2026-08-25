@@ -4,6 +4,12 @@
 import { StorageError } from '@strands-agents/sdk'
 import type { Storage } from '@strands-agents/sdk/storage'
 
+/** An object that can embed text into a vector representation. Matches `@strands-agents/sdk/storage`'s `Embedder`. */
+export interface Embedder {
+  /** Produces a dense vector representation of the input text. */
+  embed: (text: string) => Promise<number[]>
+}
+
 import { gunzip, gzip } from 'node:zlib'
 import { promisify } from 'node:util'
 
@@ -126,6 +132,14 @@ export interface DynamoDBStorageConfig {
   vectorAttribute?: string
   /** Optional override of the native `SearchVectors` call (testing, custom routing). When unset, `search()` calls DynamoDB natively. */
   vectorSearch?: VectorSearchAdapter
+  /**
+   * Embedding model for automatic vector embedding.
+   *
+   * When provided, `write()` automatically embeds content and stores the vector
+   * (unless an explicit `vector` is passed in options), and `search()` accepts a
+   * plain string query (embedding it before issuing the vector search).
+   */
+  embeddingModel?: Embedder
 }
 
 /** Attribute names for the single-table layout. */
@@ -184,6 +198,7 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
   private readonly _indexName: string
   private readonly _vectorAttribute: string
   private readonly _vectorSearch: VectorSearchAdapter | undefined
+  private readonly _embeddingModel: Embedder | undefined
   private readonly _compress: boolean
   private readonly _ttlSeconds: number | undefined
   private readonly _ttlEnabled: boolean
@@ -210,6 +225,7 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
     this._indexName = config?.indexName ?? 'vector_index'
     this._vectorAttribute = config?.vectorAttribute ?? 'vector'
     this._vectorSearch = config?.vectorSearch
+    this._embeddingModel = config?.embeddingModel
     this._compress = config?.compression === 'gzip'
     this._ttlSeconds = config?.ttlSeconds
     this._ttlEnabled = config?.ttlSeconds !== undefined
@@ -233,15 +249,15 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
     const full = `${this._prefix}${normalized}`
     const { pk, sk } = this._split(full)
     const extra: Record<string, unknown> = {}
+    // Auto-embed when an embeddingModel is configured and no explicit vector is passed.
+    const vector = options?.vector ?? (this._embeddingModel ? await this._embeddingModel.embed(new TextDecoder().decode(data)) : undefined)
     // The embedding stays inline in DynamoDB even when the payload is offloaded,
     // because the native vector index can only index an on-item attribute.
-    if (options?.vector) {
-      // Mirror of the query-side check in search(): the service rejects
-      // non-finite values anyway, but as an opaque write failure.
-      if (!options.vector.every((v) => Number.isFinite(v))) {
+    if (vector) {
+      if (!vector.every((v: number) => Number.isFinite(v))) {
         throw new StorageError('Vector contains non-finite values (nan/inf); the DynamoDB N type rejects them.')
       }
-      extra[this._vectorAttribute] = options.vector
+      extra[this._vectorAttribute] = vector
     }
     if (options?.metadata) extra[META_ATTR] = options.metadata
     const ttlSeconds = options?.ttlSeconds ?? this._ttlSeconds
@@ -405,6 +421,7 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
     if (this._s3Prefix) config.s3Prefix = this._s3Prefix
     if (this._s3Client) config.s3Client = this._s3Client
     if (this._vectorSearch) config.vectorSearch = this._vectorSearch
+    if (this._embeddingModel) config.embeddingModel = this._embeddingModel
     if (this._compress) config.compression = 'gzip'
     if (this._ttlSeconds !== undefined) config.ttlSeconds = this._ttlSeconds
     config.ttlAttribute = this._ttlAttribute
@@ -430,7 +447,14 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
    *
    * @throws {@link StorageError} if the search fails or `topK` is out of range
    */
-  async search(query: SearchQuery): Promise<SearchResult[]> {
+  async search(query: string | SearchQuery): Promise<SearchResult[]> {
+    if (typeof query === 'string') {
+      if (this._embeddingModel) {
+        const vector = await this._embeddingModel.embed(query)
+        return this.search({ vector, topK: 20, includeValues: true })
+      }
+      return this._keywordSearch(query)
+    }
     if (query.pk !== undefined) this._assertPkInScope(query.pk)
     try {
       const matches: Array<{ key: string; score: number; metadata?: Record<string, unknown>; data?: Uint8Array }> = this
@@ -548,6 +572,16 @@ export class DynamoDBStorage implements Storage<string | DynamoDBListQuery> {
       if (matches.length >= query.topK) break
     }
     return matches
+  }
+
+  /**
+   * Keyword fallback for string queries when no embedding model is configured.
+   * Delegates to the SDK's KeywordSearchStrategy (list + read + token-overlap).
+   */
+  private async _keywordSearch(query: string): Promise<SearchResult[]> {
+    const { KeywordSearchStrategy } = await import('@strands-agents/sdk/storage/search')
+    const hits = await KeywordSearchStrategy.search(this, query)
+    return hits.map((h) => ({ key: h.key, score: h.score }))
   }
 
   /** Exact-equality match of every filter entry against item metadata. */

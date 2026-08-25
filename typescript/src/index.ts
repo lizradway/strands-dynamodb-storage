@@ -26,6 +26,7 @@ export { DynamoDBStorage } from './dynamodb-storage.js'
 export type {
   DynamoDBStorageConfig,
   DynamoDBListQuery,
+  Embedder,
   SearchQuery,
   SearchResult,
   VectorSearchAdapter,
