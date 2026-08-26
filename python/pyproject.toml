@@ -12,9 +12,8 @@ license = "Apache-2.0"
 authors = [{ name = "Amazon Web Services" }]
 keywords = ["strands", "strands-agents", "dynamodb", "storage", "agent", "memory", "aws"]
 dependencies = [
-    # Floor: 1.48.0 introduced the unified Storage interface and StorageError
-    # (strands-agents/harness-sdk #3259). Below it, importing this package fails.
-    "strands-agents>=1.48.0",
+    # Floor: 1.54.0 introduced StorageSearchResult (strands-agents/harness-sdk #3925).
+    "strands-agents>=1.54.0",
     "boto3>=1.43.64",
 ]
 

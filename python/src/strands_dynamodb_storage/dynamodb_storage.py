@@ -14,6 +14,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
+from strands.storage.storage import StorageSearchResult
 from strands.types.exceptions import StorageError
 
 from .keys import normalize_key, normalize_prefix
@@ -78,12 +79,9 @@ class SearchQuery:
 
 
 @dataclass
-class SearchResult:
+class SearchResult(StorageSearchResult):
     """A single nearest-neighbour match."""
 
-    key: str
-    score: float
-    data: Optional[bytes] = None
     metadata: Optional[dict[str, Any]] = None
 
 
@@ -412,9 +410,8 @@ class DynamoDBStorage:
     async def search(self, query: SearchQuery) -> builtins.list[SearchResult]:
         """Nearest-neighbour vector search over items written with a ``vector``.
 
-        Optional part of the ``Storage`` contract — consumers feature-detect
-        (``hasattr(storage, "search")``) and fall back to client-side KNN when absent.
-        Calls DynamoDB ``SearchVectors`` natively (requires boto3 >= 1.43.64); a
+        Implements the ``Storage.search`` protocol method using DynamoDB's native
+        ``SearchVectors`` (requires boto3 >= 1.43.64); a
         ``vector_search`` adapter, when configured, overrides the native call.
 
         The score is the raw ``Score`` from the vector index and its direction
